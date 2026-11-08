@@ -131,6 +131,10 @@ def describe_where(state: dict[str, dict[str, Any]], start: str) -> str:
             elif place.get("place_type") == "surface" and current == start:
                 parts.append(on_phrase(place["name"]))
             break
+        if "held_by" in attrs:
+            holder = state[attrs["held_by"]]["name"]
+            parts.append(f"held by {holder}")
+            break
         break
     if not parts:
         raise ValueError(f"no location for {start}")
@@ -147,10 +151,11 @@ def _english_list(names: list[str]) -> str:
 
 
 def _content_names(state: dict[str, dict[str, Any]], container: str) -> list[str]:
+    """Direct contents only. A box inside the bag counts; the key inside that box does not."""
     names = [
         attrs["name"]
         for attrs in state.values()
-        if attrs.get("in") == container and attrs.get("kind") == "object"
+        if attrs.get("in") == container and attrs.get("kind") in {"object", "container"}
     ]
     return sorted(names, key=str.lower)
 
