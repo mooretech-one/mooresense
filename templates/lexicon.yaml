@@ -14,6 +14,10 @@ people:
   - Theo
   - Tom
   - Jan
+  - Ruth
+  - Chris
+  - Imani
+  - Ned
 small_objects:
   - key
   - coin
@@ -23,6 +27,10 @@ small_objects:
   - button
   - pebble
   - crayon
+  - bead
+  - eraser
+  - screw
+  - peg
 closable_containers:
   - red box
   - blue box
@@ -30,14 +38,21 @@ closable_containers:
   - wooden box
   - metal tin
   - small chest
+  - biscuit tin
+  - white box
+  - round tin
 soft_containers:
   - bag
   - sack
   - pouch
+  - tote
+  - rucksack
 drawers:
   - drawer
   - desk drawer
   - bottom drawer
+  - top drawer
+  - kitchen drawer
 rooms:
   - kitchen
   - hallway
@@ -45,12 +60,19 @@ rooms:
   - office
   - pantry
   - study
+  - garage
+  - porch
+  - bathroom
+  - laundry room
 surfaces:
   - shelf
   - table
   - counter
   - desk
   - plate
+  - tray
+  - bench
+  - windowsill
 labeled_cups:
   - cup A
   - cup B
@@ -58,15 +80,21 @@ labeled_cups:
   - red cup
   - blue cup
   - green cup
+  - yellow cup
+  - white cup
 liquids:
   - water
   - juice
   - milk
+  - tea
+  - soup
 open_vessels:
   - glass
   - cup
   - mug
   - bowl
+  - tumbler
+  - jug
 sealable_vessels:
   - jar
   - bottle
@@ -74,31 +102,48 @@ sealable_vessels:
 plastic_bottles:
   - plastic bottle
   - plastic flask
+  - sports bottle
 open_bowls:
   - bowl
   - plastic tub
 fixtures:
   - sink
   - basin
+  - bucket
+  - drain
 dense_objects:
   - pebble
   - coin
   - key
   - marble
   - stone
+  - brick
 falling_objects:
   - book
   - plate
   - phone
   - shoe
+  - brick
+  - orange
 heavy_objects:
   - piano
   - sofa
   - wardrobe
+  - refrigerator
+  - washing machine
 light_objects:
   - mug
   - book
   - apple
+  - pencil
+  - spoon
+  - lemon
+  - sock
+buoyant_objects:
+  - cork
+  - apple
+  - twig
+  - wooden block
 bowls:
   - bowl
   - basin

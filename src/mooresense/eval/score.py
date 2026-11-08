@@ -23,7 +23,17 @@ from mooresense.schema import Item
 _LABEL = re.compile(r"(?i)^(?:answer\s*[:=]\s*)?([A-H])(?:\s*[\).:\-]\s*|\s*$)")
 _LABEL_ONLY = re.compile(r"(?i)^([A-H])\s*[\).:]?\s*$")
 _STRICT_LETTER_TEXT = re.compile(r"(?i)^([A-H])\s*[\).:\-]\s+(.+?)\s*$")
-_RATING = re.compile(r"(?i)^\s*(?:rating|score)?\s*[:=]?\s*([1-5])\s*(?:/5)?\s*$")
+# A rating answer is one digit. ``1/5``, ``1 out of 5``, and a short scale gloss
+# (``1 (impossible)``, ``5 - everyday``) are the same digit: the prompt and the
+# question both show the scale that way. Trailing prose (``1 because…``) does
+# not match, so a number buried in a rationale still fails.
+_RATING = re.compile(
+    r"(?i)^\s*(?:rating|score)?\s*[:=]?\s*([1-5])"
+    r"(?:\s*/\s*5|\s+out\s+of\s+5)?"
+    r"(?:\s*[\(\[]\s*[a-z][a-z ]{0,32}\s*[\)\]])?"
+    r"(?:\s*[-–—]\s*[a-z][a-z ]{0,32})?"
+    r"\s*[.!]?\s*$"
+)
 # Last explicit marker on its own line. ``**Answer:** A`` and ``The answer is A``
 # both count. The last one wins so a letter mentioned earlier in the rationale does not.
 _ANSWER_MARK = re.compile(

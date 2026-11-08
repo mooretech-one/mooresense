@@ -11,6 +11,8 @@ build/
 .DS_Store
 results/*
 !results/.gitkeep
+!results/baselines/
+!results/baselines/**
 data/private/
 data/fresh/
 data/test/*.jsonl
