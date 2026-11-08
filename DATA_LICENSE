@@ -1,0 +1,41 @@
+MooreSense data license
+========================
+
+Copyright 2026 André Slabber / Mooretech
+
+The benchmark data in this repository is licensed under the
+Creative Commons Attribution 4.0 International License (CC BY 4.0).
+
+    https://creativecommons.org/licenses/by/4.0/
+    https://creativecommons.org/licenses/by/4.0/legalcode
+
+This covers seeds/, templates/, data/, schema examples that quote items,
+and other authored benchmark text. It does not cover the Python package,
+tests, or tooling, which are under the Apache License 2.0 (see LICENSE
+and NOTICE).
+
+You are free to share and adapt the data for any purpose, including
+commercially, provided you give appropriate credit, link to the license,
+and indicate if changes were made. Attribution: André Slabber / Mooretech,
+MooreSense.
+
+Terms of use
+------------
+
+These terms sit alongside CC BY 4.0. They are a request we ask users to
+honour when they report results or train models.
+
+1. Do not train models on the held-out test split, including paraphrases
+   that preserve the item. The test split is not in this repository. When
+   it is released it will be a zip that includes this canary, and it will
+   not be published as plain text in the git history.
+2. If you train on the test split anyway, say so in the model card and
+   report it (open an issue on the MooreSense repository).
+3. The public dev split may be used for research, development, error
+   analysis, and published dev-set scores. State that those scores are on
+   the public dev split.
+4. Do not copy items from other benchmarks into MooreSense. Cite those
+   projects for inspiration only.
+5. No endorsement by Mooretech or the authors is implied by your use.
+
+The canary string is recorded in CANARY.txt.
