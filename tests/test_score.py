@@ -11,7 +11,7 @@ from mooresense.eval.report import (
     summarize,
 )
 from mooresense.eval.runner import build_prompt, completions_url
-from mooresense.eval.score import field_f1, score_prediction
+from mooresense.eval.score import field_f1, rescore_scores, score_prediction
 from mooresense.gen.generate import generate_items
 from mooresense.paths import find_root
 from mooresense.schema import load_jsonl
@@ -29,7 +29,9 @@ def test_multiple_choice_parsing():
     assert score_prediction(item, item.answer.text).correct
     wrong = next(choice.label for choice in item.choices if choice.label != item.answer.label)
     assert score_prediction(item, wrong).correct is False
-    assert score_prediction(item, "I am not sure, maybe somewhere.").correct is False
+    unsure = score_prediction(item, "I am not sure, maybe somewhere.")
+    assert unsure.correct is False
+    assert unsure.parse_failed is True
 
 
 def test_free_text_time_and_ordering_and_rating():
@@ -50,7 +52,9 @@ def test_free_text_time_and_ordering_and_rating():
     off = score_prediction(piano, "4")
     assert off.correct is False
     assert off.abs_error == 3.0
-    assert score_prediction(piano, "pretty unlikely").abs_error is None
+    vague = score_prediction(piano, "pretty unlikely")
+    assert vague.abs_error is None
+    assert vague.parse_failed is True
 
 
 def test_world_state_f1_is_field_level():
@@ -76,6 +80,8 @@ def test_aggregates_seed_consistency_distractors_and_gap():
     summary = summarize(scores)
     headline = next(row for row in summary["by_category_tier"] if row["category"] == "all")
     assert headline["accuracy"] == 1.0
+    assert summary["parse_failure_rate"] == 0.0
+    assert headline["n_parse_failed"] == 0
     low, high = bootstrap_ci([True, True, True])
     assert low == 1.0 and high == 1.0
 
@@ -111,9 +117,182 @@ def test_prompt_and_endpoint_url():
     assert item.context in full
     assert item.context not in bare
     assert item.question in bare
+    assert "Answer: <letter>" in full
     assert completions_url("http://localhost:11434/v1") == (
         "http://localhost:11434/v1/chat/completions"
     )
     assert completions_url("http://localhost:8080/") == (
         "http://localhost:8080/v1/chat/completions"
     )
+
+
+def test_terse_letters_still_score():
+    items = _by_id()
+    yes_a = items["causal.care.t2.0003-v00"]
+    assert yes_a.answer.label == "A"
+    letter = score_prediction(yes_a, "A")
+    assert letter.parsed == "A"
+    assert letter.correct is True
+    assert letter.parse_failed is False
+
+    yes_b = items["causal.care.t2.0003-v01"]
+    assert yes_b.choices is not None
+    assert any(choice.label == "B" and choice.text == "yes" for choice in yes_b.choices)
+    terse = score_prediction(yes_b, "B. yes")
+    assert terse.parsed == "B"
+    assert terse.correct is True
+    assert terse.parse_failed is False
+    assert score_prediction(yes_b, "yes").parsed == "B"
+
+
+def test_answer_marker_beats_letters_in_the_rationale():
+    item = _by_id()["causal.chain.t3.0005-v02"]
+    assert item.answer.label == "A"
+    prose = (
+        "B (Owen had worn a hat) does not stop the mud from reaching the kitchen.\n"
+        "- **C** (Phone stayed quiet) isn't related to the muddy floor.\n"
+        "\n"
+        "**Answer:** A"
+    )
+    scored = score_prediction(item, prose)
+    assert scored.parsed == "A"
+    assert scored.correct is True
+    assert scored.parse_failed is False
+
+    # The tail observed on qwen3:1.7b with a 2048-token cap.
+    observed = "The hat doesn't affect the muddy floor directly).\n\n**Answer:** A"
+    assert score_prediction(item, observed).parsed == "A"
+
+    # The marker is the answer even when an earlier letter is the gold one.
+    wrong_marker = prose.replace("**Answer:** A", "**Answer:** C")
+    missed = score_prediction(item, wrong_marker)
+    assert missed.parsed == "C"
+    assert missed.correct is False
+    assert missed.parse_failed is False
+
+    bullet_only = "- **C** (Phone stayed quiet) isn't related to the muddy floor."
+    bullet = score_prediction(item, bullet_only)
+    assert bullet.parsed is None
+    assert bullet.correct is False
+    assert bullet.parse_failed is True
+
+    last_line = score_prediction(
+        item,
+        "B is the hat and C is the phone, neither of which stops the mud.\nA",
+    )
+    assert last_line.parsed == "A"
+    assert last_line.correct is True
+
+
+def test_prose_without_a_letter_is_a_parse_failure():
+    item = _by_id()["causal.care.t2.0003-v00"]
+    prose = (
+        "If the neighbour had watered it weekly, it would not have dried out. "
+        "Thus, the plant would most likely have survived."
+    )
+    scored = score_prediction(item, prose)
+    assert scored.parsed is None
+    assert scored.correct is False
+    assert scored.parse_failed is True
+    summary = summarize([scored])
+    assert summary["parse_failure_rate"] == 1.0
+    assert summary["n_parse_failed"] == 1
+    assert summary["by_category_tier"][0]["accuracy"] == 0.0
+
+
+def test_think_tags_are_not_parsed_as_the_answer():
+    item = _by_id()["causal.chain.t3.0005-v02"]
+    raw = (
+        "<think>C looks tempting, and B is the hat. "
+        "The phone is irrelevant so the letter is not C. **Answer:** C</think>\n"
+        "\n"
+        "**Answer:** A"
+    )
+    scored = score_prediction(item, raw)
+    assert scored.parsed == "A"
+    assert scored.correct is True
+    assert scored.parse_failed is False
+    assert "<think>" not in scored.prediction
+    assert "C looks tempting" in scored.reasoning
+    assert scored.raw == raw
+
+    truncated = "<think>still thinking about B and C and the muddy floor"
+    empty_answer = score_prediction(item, truncated)
+    assert empty_answer.parsed is None
+    assert empty_answer.parse_failed is True
+    assert "muddy floor" in empty_answer.reasoning
+    assert empty_answer.prediction == ""
+
+    closed_without_answer = "<think>The letter B shows up here. **Answer:** B</think>"
+    buried = score_prediction(item, closed_without_answer)
+    assert buried.parsed is None
+    assert buried.parse_failed is True
+    assert "letter B" in buried.reasoning
+    # Rescore must not start reading the saved think block as the answer.
+    again = rescore_scores([item], [buried])[0]
+    assert again.parsed is None
+    assert again.parse_failed is True
+    assert "letter B" in again.reasoning
+
+    answered = score_prediction(item, "<think>B is the hat.</think>\n\n**Answer:** A")
+    assert answered.parsed == "A"
+    rescored = rescore_scores([item], [answered])[0]
+    assert rescored.parsed == "A"
+    assert rescored.correct is True
+    assert "hat" in rescored.reasoning
+
+
+def test_empty_content_and_reasoning_channel():
+    item = _by_id()["causal.care.t2.0003-v00"]
+    empty = score_prediction(item, "")
+    assert empty.raw == ""
+    assert empty.prediction == ""
+    assert empty.parsed is None
+    assert empty.correct is False
+    assert empty.parse_failed is True
+
+    recovered = score_prediction(item, "", reasoning="The plant survives.\n\n**Answer:** A")
+    assert recovered.parsed == "A"
+    assert recovered.correct is True
+    assert recovered.parse_failed is False
+    assert recovered.prediction == ""
+    assert "plant survives" in recovered.reasoning
+    recovered_again = rescore_scores([item], [recovered])[0]
+    assert recovered_again.parsed == "A"
+    assert recovered_again.correct is True
+
+    trace_only = score_prediction(
+        item,
+        "",
+        reasoning="Thus, the plant would most likely have survived.",
+    )
+    assert trace_only.parse_failed is True
+    assert trace_only.parsed is None
+
+    # The content channel wins when it has an answer, even if the trace disagrees.
+    content = score_prediction(item, "B", reasoning="**Answer:** A")
+    assert content.parsed == "B"
+    assert content.correct is False
+    assert "Answer" in content.reasoning
+
+
+def test_final_answer_line_for_other_formats():
+    items = _by_id()
+    clock = items["time.clock.t1.0001-v00"]
+    timed = score_prediction(clock, "Quarter to three in the afternoon.\nAnswer: 14:45")
+    assert timed.correct is True
+    assert timed.parse_failed is False
+
+    piano = items["plausibility.capacity.t1.0001-v00"]
+    rated = score_prediction(piano, "A piano does not fit in a pocket.\n\n**Answer:** 1")
+    assert rated.parsed == "1"
+    assert rated.correct is True
+    assert rated.abs_error == 0.0
+    buried = score_prediction(piano, "I would rate this a 5 if it were a bag.\nIt is impossible.")
+    assert buried.parse_failed is True
+    assert buried.abs_error is None
+
+    order = items["physics.heat.t3.0006-v00"]
+    ordered = score_prediction(order, f"The rim chars last.\n\nAnswer: {order.answer.text}")
+    assert ordered.correct is True
+    assert ordered.parse_failed is False
