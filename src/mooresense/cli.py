@@ -75,7 +75,7 @@ def _parser() -> argparse.ArgumentParser:
         "--max-tokens",
         type=int,
         default=None,
-        help="Generation cap. Default 1024, or 4096 with --think on. "
+        help="Generation cap. Default 1024, or 8192 with --think on. "
         "Terse models stop at end-of-sequence either way.",
     )
     evaluate.add_argument(
