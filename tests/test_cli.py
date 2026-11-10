@@ -89,6 +89,7 @@ def test_chat_completion_posts_temperature_zero():
     assert body["model"] == "qwen3:8b"
     assert body["think"] is False
     assert body["reasoning_effort"] == "none"
+    assert "last line" in str(body["messages"][0]["content"])
     user = body["messages"][1]["content"]
     assert isinstance(user, str)
     assert user.startswith("/no_think\n")
@@ -230,7 +231,7 @@ def test_eval_records_reasoning_parse_failures_and_default_budget(tmp_path: Path
         )
         == 0
     )
-    assert calls["think_on_tokens"] == 4096
+    assert calls["think_on_tokens"] == 8192
     row = json.loads(answered.read_text(encoding="utf-8").splitlines()[0])
     assert row["parsed"] == "A"
     assert row["correct"] is True

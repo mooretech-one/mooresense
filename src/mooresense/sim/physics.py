@@ -790,6 +790,13 @@ def _melt_in_liquid(instance: dict[str, Any]) -> Simulation:
     )
 
 
+def _script(instance: dict[str, Any]) -> Simulation:
+    """Run a state-engine script and read the gold answer from its world."""
+    from mooresense.sim.state import simulate_state
+
+    return simulate_state(instance)
+
+
 _RULES = {
     "invert_vessel": _invert,
     "freeze": _freeze,
@@ -804,6 +811,7 @@ _RULES = {
     "falls_into": _falls_into,
     "both_fall": _both_fall,
     "melt_in_liquid": _melt_in_liquid,
+    "script": _script,
 }
 
 
