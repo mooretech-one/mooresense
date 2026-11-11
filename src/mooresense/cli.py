@@ -208,11 +208,18 @@ def _print_headline(out: Path, summary_path: Path, summary: dict[str, Any]) -> N
     shown = "n/a" if accuracy is None else f"{accuracy:.3f}"
     rate = summary["parse_failure_rate"]
     rate_shown = "n/a" if rate is None else f"{rate:.3f}"
+
+    def _shown(key: str) -> str:
+        value = summary[key]
+        return "n/a" if value is None else f"{value:.3f}"
+
     print(f"Wrote {out} and {summary_path}")
     print(
         f"accuracy {shown} on {headline['n']} scored items; "
         f"chance {summary['chance']}; seed consistency {summary['seed_consistency']}; "
-        f"parse failures {rate_shown}"
+        f"parse failures {rate_shown} "
+        f"(truncated {_shown('truncation_rate')}, "
+        f"malformed {_shown('malformed_rate')}, empty {_shown('empty_rate')})"
     )
 
 

@@ -46,16 +46,34 @@ def _accuracy(flags: list[bool]) -> float | None:
     return sum(flags) / len(flags)
 
 
+def _considered(scores: list[ItemScore]) -> list[ItemScore]:
+    """Rows that were scored. Chance baselines leave ``correct`` unset."""
+    return [score for score in scores if score.correct is not None]
+
+
+def _rate(scores: list[ItemScore], count: int) -> float | None:
+    if not scores:
+        return None
+    return count / len(scores)
+
+
 def _parse_failure(scores: list[ItemScore]) -> tuple[int, float | None]:
     """Count rows that were scored but had no parseable answer.
 
     Chance baselines leave ``correct`` unset and are not failures.
+    Truncation, malformed replies, and empty replies all count.
     """
-    considered = [score for score in scores if score.correct is not None]
+    considered = _considered(scores)
     if not considered:
         return 0, None
     failed = sum(1 for score in considered if score.parse_failed)
     return failed, failed / len(considered)
+
+
+def _kind_count(scores: list[ItemScore], kind: str) -> tuple[int, float | None]:
+    considered = _considered(scores)
+    count = sum(1 for score in considered if score.failure_kind == kind)
+    return count, _rate(considered, count)
 
 
 def _row(category: str, tier: str, scores: list[ItemScore]) -> dict[str, Any]:
@@ -63,16 +81,25 @@ def _row(category: str, tier: str, scores: list[ItemScore]) -> dict[str, Any]:
     low, high = bootstrap_ci(flags)
     accuracy = _accuracy(flags)
     n_parse_failed, parse_failure_rate = _parse_failure(scores)
+    n_truncated, truncation_rate = _kind_count(scores, "truncated")
+    n_malformed, malformed_rate = _kind_count(scores, "malformed")
+    n_empty, empty_rate = _kind_count(scores, "empty")
     return {
         "accuracy": accuracy,
         "category": category,
         "ci_high": high,
         "ci_low": low,
+        "empty_rate": empty_rate,
+        "malformed_rate": malformed_rate,
         "n": len(flags),
         "n_correct": sum(flags),
+        "n_empty": n_empty,
+        "n_malformed": n_malformed,
         "n_parse_failed": n_parse_failed,
+        "n_truncated": n_truncated,
         "parse_failure_rate": parse_failure_rate,
         "tier": tier,
+        "truncation_rate": truncation_rate,
     }
 
 
@@ -151,15 +178,24 @@ def summarize(scores: list[ItemScore]) -> dict[str, Any]:
         for tier in sorted({score.tier for score in by_cat[category]}):
             rows.append(_row(category, str(tier), by_cat_tier[(category, tier)]))
     n_parse_failed, parse_failure_rate = _parse_failure(scores)
+    n_truncated, truncation_rate = _kind_count(scores, "truncated")
+    n_malformed, malformed_rate = _kind_count(scores, "malformed")
+    n_empty, empty_rate = _kind_count(scores, "empty")
     return {
         "by_category_tier": rows,
         "chance": mean_chance(scores),
         "distractor_penalty": distractor_penalty(scores),
+        "empty_rate": empty_rate,
+        "malformed_rate": malformed_rate,
         "n": len(scores),
+        "n_empty": n_empty,
+        "n_malformed": n_malformed,
         "n_parse_failed": n_parse_failed,
+        "n_truncated": n_truncated,
         "parse_failure_rate": parse_failure_rate,
         "rating_mae": rating_mae(scores),
         "seed_consistency": seed_consistency(scores),
+        "truncation_rate": truncation_rate,
     }
 
 
@@ -185,6 +221,12 @@ def write_reports(out_jsonl: Path, scores: list[ItemScore], meta: dict[str, Any]
                 "ci_high",
                 "n_parse_failed",
                 "parse_failure_rate",
+                "n_truncated",
+                "truncation_rate",
+                "n_malformed",
+                "malformed_rate",
+                "n_empty",
+                "empty_rate",
             ],
         )
         writer.writeheader()
@@ -226,6 +268,9 @@ def load_scores(path: Path) -> list[ItemScore]:
                 baseline=raw.get("baseline"),
                 reasoning=raw.get("reasoning", ""),
                 parse_failed=parse_failed,
+                failure_kind=raw.get("failure_kind"),
+                truncated=bool(raw["truncated"]) if "truncated" in raw else False,
+                finish_reason=str(raw.get("finish_reason") or ""),
             )
         )
     return scores
