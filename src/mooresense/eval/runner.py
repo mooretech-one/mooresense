@@ -119,7 +119,49 @@ _ANSWER_FIRST = (
 )
 
 
-def build_prompt(item: Item, *, omit_context: bool = False) -> str:
+def session_key(item: Item) -> str:
+    """Isolate variants. A missing session id means the seed is its own session."""
+    if item.category.value != "learn":
+        return ""
+    group = item.session_id or item.seed_id
+    return f"{group}:{item.variant}"
+
+
+def session_order(items: list[Item]) -> list[Item]:
+    """Teach each learn session in episode order.
+
+    The first time a session appears, the whole session (as far as ``items``
+    goes) is emitted from the earliest episode. Other items keep their order.
+    """
+    grouped: dict[str, list[Item]] = {}
+    for item in items:
+        key = session_key(item)
+        if not key:
+            continue
+        grouped.setdefault(key, []).append(item)
+    for group in grouped.values():
+        group.sort(key=lambda item: (item.episode if item.episode is not None else 0, item.id))
+    seen: set[str] = set()
+    ordered: list[Item] = []
+    for item in items:
+        key = session_key(item)
+        if not key:
+            ordered.append(item)
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.extend(grouped[key])
+    return ordered
+
+
+def build_prompt(
+    item: Item,
+    *,
+    omit_context: bool = False,
+    teach_mode: str = "in-context",
+    prior_contexts: list[str] | None = None,
+) -> str:
     """Ask for one scored line, before the explanation and again after the story.
 
     State choice texts are long location chains. qwen3:4b with thinking on
@@ -176,7 +218,19 @@ def build_prompt(item: Item, *, omit_context: bool = False) -> str:
             "same line and no other words. Do not break the answer across lines."
         )
     parts = [instruction, ""]
-    if not omit_context:
+    # Learn items carry the taught facts in ``context``. The no-teach and
+    # external arms leave them out. Other categories ignore ``teach_mode``.
+    # Session arms pass earlier episodes in ``prior_contexts`` so the prompt
+    # accumulates the session, not only the current teach list.
+    if item.category.value == "learn":
+        if teach_mode == "in-context" and not omit_context:
+            for earlier in prior_contexts or []:
+                if earlier:
+                    parts.append(earlier)
+                    parts.append("")
+            parts.append(item.context)
+            parts.append("")
+    elif not omit_context:
         parts.append(item.context)
         parts.append("")
     parts.append(item.question)
@@ -327,19 +381,45 @@ def evaluate_prompts(
     model: str,
     baseline: str | None,
     omit_context: bool,
+    teach_mode: str = "in-context",
+    learner: Any | None = None,
 ) -> list[ItemScore]:
-    scores: list[ItemScore] = []
-    for item in items:
-        prompt = build_prompt(item, omit_context=omit_context)
-        raw = complete(item, prompt)
+    if teach_mode not in {"in-context", "none", "external"}:
+        raise ValueError(f"unknown teach mode {teach_mode!r}")
+    if teach_mode == "external" and learner is None:
+        raise ValueError("external teach mode needs a learner")
+    scores: dict[str, ItemScore] = {}
+    memory: dict[str, list[str]] = {}
+    started: set[str] = set()
+    for item in session_order(items):
+        key = session_key(item)
+        prior = list(memory.get(key, [])) if key and teach_mode == "in-context" else None
+        prompt = build_prompt(
+            item,
+            omit_context=omit_context,
+            teach_mode=teach_mode,
+            prior_contexts=prior,
+        )
+        if item.category.value == "learn" and teach_mode == "external":
+            assert learner is not None
+            if key not in started:
+                learner.reset()
+                started.add(key)
+            if item.teach:
+                learner.teach(item.teach)
+            raw = learner.answer(item)
+        else:
+            raw = complete(item, prompt)
+        if key and teach_mode == "in-context":
+            memory.setdefault(key, []).append(item.context)
         finish_reason = ""
         if isinstance(raw, ChatResult):
             content, reasoning = raw.content, raw.reasoning
             finish_reason = raw.finish_reason
         else:
-            content, reasoning = raw, ""
+            content, reasoning = str(raw), ""
         score = score_prediction(item, content, reasoning=reasoning, finish_reason=finish_reason)
         score.model = model
         score.baseline = baseline
-        scores.append(score)
-    return scores
+        scores[item.id] = score
+    return [scores[item.id] for item in items]
