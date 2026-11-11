@@ -16,3 +16,4 @@ class Simulation:
     world_state: dict[str, dict[str, Any]] = field(default_factory=dict)
     trace: list[dict[str, Any]] = field(default_factory=list)
     distractors: list[str] = field(default_factory=list)
+    teach: list[dict[str, Any]] = field(default_factory=list)
