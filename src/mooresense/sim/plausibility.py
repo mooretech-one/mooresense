@@ -17,6 +17,9 @@ MASS = {
     "wardrobe": "heavy",
     "refrigerator": "heavy",
     "washing machine": "heavy",
+    "anvil": "heavy",
+    "boulder": "heavy",
+    "mattress": "heavy",
     "mug": "light",
     "book": "light",
     "apple": "light",
@@ -24,13 +27,35 @@ MASS = {
     "spoon": "light",
     "lemon": "light",
     "sock": "light",
+    "feather": "light",
+    "postcard": "light",
+    "teaspoon": "light",
 }
 
 WET_INSTRUMENTS = frozenset(
-    {"wet_towel", "soaked_cloth", "wet_sponge", "dripping_cloth", "wet_napkin"}
+    {
+        "wet_towel",
+        "soaked_cloth",
+        "wet_sponge",
+        "dripping_cloth",
+        "wet_napkin",
+        "wet_rag",
+    }
 )
 ABSORBENT = frozenset(
-    {"towel", "jeans", "cloth", "paper_towel", "sponge", "napkin", "dishcloth", "tea_towel"}
+    {
+        "towel",
+        "jeans",
+        "cloth",
+        "paper_towel",
+        "sponge",
+        "napkin",
+        "dishcloth",
+        "tea_towel",
+        "rag",
+        "bath_towel",
+        "flannel",
+    }
 )
 
 IMPOSSIBLE_RULES = frozenset(
@@ -52,6 +77,13 @@ STABILITY = {
     ("water", "freezer", "stays_liquid"): 1,
     ("rock", "table", "stays_a_rock"): 5,
     ("book", "closed_cupboard", "stays_dry"): 5,
+    # Everyday and one-sided. A sunny sill melts chocolate; a fridge does not freeze soup.
+    ("butter", "hot_pan", "stays_solid"): 1,
+    ("snowball", "warm_room", "stays_frozen"): 1,
+    ("chocolate", "sunny_windowsill", "stays_solid"): 1,
+    ("ice", "freezer", "stays_frozen"): 5,
+    ("soup", "fridge", "stays_liquid"): 5,
+    ("rock", "rain", "stays_a_rock"): 5,
 }
 
 
